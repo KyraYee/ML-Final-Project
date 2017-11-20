@@ -13,11 +13,13 @@ import mailbox
 from nltk.corpus import stopwords
 from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier
-
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
 
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import shuffle
+import pickle
 
 #from https://stackoverflow.com/questions/7166922/extracting-the-body-of-an-email-from-mbox-file-decoding-it-to-plain-text-regard
 def getcharsets(msg):
@@ -197,7 +199,7 @@ def performance(y_true, y_pred, metric="accuracy") :
     if metric=="accuracy":
         return metrics.accuracy_score(y_true,y_label)
     elif metric=="f1_score":
-        return metrics.f1_score(y_true, y_label)#TODO LOOK AT AND MAYBE ADD LABELS PARAMETER
+        return metrics.f1_score(y_true, y_label)
     elif metric=="auroc":
         return metrics.roc_auc_score(y_true, y_pred)
     elif metric=="precision":
@@ -255,7 +257,29 @@ def extract_feature_vectors(data, word_list) :
     
     return feature_matrix #, sorted_word_list
 
-def cv_performance(clf, X, y, kf, metric="accuracy") :
+def test_performance(clf,x_test,y_test):
+    y_pred=clf.predict(x_test)
+    acc=metrics.accuracy_score(y_test,y_pred)
+    cm=metrics.confusion_matrix(y_test,y_pred)
+    prec=metrics.precision_score(y_test, y_pred)
+    rec=metrics.recall_score(y_test, y_pred)
+
+    return  prec, rec, acc, cm
+
+def train_and_test(clf, X_train, y_train, skf, X_test, y_test):
+    
+    cv_prec, cv_rec, cv_acc=cv_performance(clf, X_train, y_train, skf)
+    print("CV prec", cv_prec)
+    print("CV rec", cv_rec)
+    print("CV acc", cv_acc)
+
+    prec, rec, acc, cm= test_performance(clf, X_test, y_test)
+    print("confusion matrix test set", cm)
+    print("test prec", prec)
+    print("test rec",rec)
+    print("test acc", acc)
+
+def cv_performance(clf, X, y, kf) :
     """
     from ps6
     Splits the data, X and y, into k-folds and runs k-fold cross-validation.
@@ -278,15 +302,30 @@ def cv_performance(clf, X, y, kf, metric="accuracy") :
         score   -- float, average cross-validation performance across k folds
     """
     
-    scores = []
+    precision = []
+    recall=[]
+    accuracy=[]
+
     for train, test in kf.split(X, y) :
         X_train, X_test, y_train, y_test = X[train], X[test], y[train], y[test]
         clf.fit(X_train, y_train)
-        y_pred = clf.decision_function(X_test)
-        score = performance(y_test, y_pred, metric)
-        if not np.isnan(score) :
-            scores.append(score)
-    return np.array(scores).mean()
+        y_pred = clf.predict(X_test)
+#        score = performance(y_test, y_pred, metric)
+        acc=metrics.accuracy_score(y_test,y_pred)
+        #cm=metrics.confusion_matrix(y_true,y_pred)
+        prec=metrics.precision_score(y_test, y_pred)
+        rec=metrics.recall_score(y_test, y_pred)
+
+        # if not np.isnan(score) :
+        #     scores.append(score)
+
+        precision.append(prec)
+        recall.append(rec)
+        accuracy.append(acc)
+        
+    
+        
+    return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean()
 
 
 #['X-Gmail-Labels', 'Delivered-To', 'From', 'Return-Path', 'List-ID', 'Mailing-list', 'X-Gm-Message-State', 'To', 'Message-ID', 'List-Post', 'X-Received', 'X-Google-DKIM-Signature', 'In-Reply-To', 'Date', 'List-Archive', 'body', 'Received', 'Received-SPF', 'Authentication-Results', 'X-Original-Authentication-Results', 'X-BeenThere', 'X-Google-Group-Id', 'Reply-To', 'List-Help', 'MIME-Version', 'Precedence', 'X-Spam-Checked-In-Group', 'X-Original-Sender', 'X-GM-THRID', 'References', 'DKIM-Signature', 'List-Unsubscribe', 'Content-Type', 'Subject']
@@ -318,9 +357,21 @@ def main():
     y=np.concatenate((y1,y2), axis=0)
     X=np.concatenate((feature_matrix1, feature_matrix2), axis=0)
 
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
+    np.savez_compressed("reply only data" , X=X, y=y)
     skf= StratifiedKFold(n_splits=10, shuffle=True)
-    clf=RandomForestClassifier()
-    #print("performance",cv_performance(clf, X, y, skf, metric="accuracy") )
+
+    LR=LogisticRegression()
+    RF=RandomForestClassifier()
+    
+    print("log reg")
+    train_and_test(LR, X_train, y_train, skf, X_test, y_test)
+    print("random forest")
+    train_and_test(RF, X_train, y_train, skf, X_test, y_test)
+    # with open('iniial_model_BOW_no_replies.pickle', 'wb') as handle:
+    #     pickle.dump(clf, handle)
+
+
 
 if __name__=="__main__":
     main()
