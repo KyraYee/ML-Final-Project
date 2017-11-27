@@ -20,6 +20,7 @@ from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import shuffle
 import pickle
+from nltk.stem.snowball import SnowballStemmer
 
 #from https://stackoverflow.com/questions/7166922/extracting-the-body-of-an-email-from-mbox-file-decoding-it-to-plain-text-regard
 def getcharsets(msg):
@@ -93,10 +94,18 @@ def clean_text(data):
     for entry in data:
         body=entry['body']
         tokens = nltk.word_tokenize(body)
-        tokens=[word for word in tokens if word not in stop_words and len(word)<30]
+        stemmer = SnowballStemmer("english")
+        tokens=[word for word in tokens if word not in stop_words and len(word)<30]  #tokens are unicode
         for word in tokens:
-            if word not in dictionary and "@" not in word:
-                dictionary.append(word)
+            #word is of type unicode
+            try:
+                clean_word=stemmer.stem(word.encode('ascii', 'ignore'))
+                if clean_word not in dictionary and "@" not in clean_word :
+
+                    dictionary.append(clean_word)
+            except UnicodeDecodeError:
+                print("unicode error in text cleaning")
+                print(word)
         entry['tokens']=tokens
     return data , dictionary
 
@@ -172,160 +181,162 @@ def seeFeature(data, feature):
             except KeyError:
                 print("key error body ")
 
-def performance(y_true, y_pred, metric="accuracy") :
-    """
-    #from ps 6
-    Calculates the performance metric based on the agreement between the 
-    true labels and the predicted labels.
-    
-    Parameters
-    --------------------
-        y_true -- numpy array of shape (n,), known labels
-        y_pred -- numpy array of shape (n,), (continuous-valued) predictions
-        metric -- string, option used to select the performance measure
-                  options: 'accuracy', 'f1_score', 'auroc', 'precision',
-                           'sensitivity', 'specificity'        
-    
-    Returns
-    --------------------
-        score  -- float, performance score
-    """
-    # map continuous-valued predictions to binary labels
-    y_label = np.sign(y_pred)
-    y_label[y_label==0] = 1 # map points of hyperplane to +1
-    
-    ### ========== TODO : START ========== ###
-    # part 2a: compute classifier performance
-    if metric=="accuracy":
-        return metrics.accuracy_score(y_true,y_label)
-    elif metric=="f1_score":
-        return metrics.f1_score(y_true, y_label)
-    elif metric=="auroc":
-        return metrics.roc_auc_score(y_true, y_pred)
-    elif metric=="precision":
-        return metrics.precision_score(y_true, y_label)
-    elif metric=="sensitivity":
-        return metrics.recall_score(y_true, y_label)
-    elif metric=="specificity":
-        cm=metrics.confusion_matrix(y_true,y_label)
-        tn, fp, fn, tp = cm.ravel()
-        return tn/float(tn+fp)
-    
-    return 0
 
-def extract_feature_vectors(data, word_list) :
-    """
+# #from here on is copied into email classifier
+# def performance(y_true, y_pred, metric="accuracy") :
+#     """
+#     #from ps 6
+#     Calculates the performance metric based on the agreement between the 
+#     true labels and the predicted labels.
+    
+#     Parameters
+#     --------------------
+#         y_true -- numpy array of shape (n,), known labels
+#         y_pred -- numpy array of shape (n,), (continuous-valued) predictions
+#         metric -- string, option used to select the performance measure
+#                   options: 'accuracy', 'f1_score', 'auroc', 'precision',
+#                            'sensitivity', 'specificity'        
+    
+#     Returns
+#     --------------------
+#         score  -- float, performance score
+#     """
+#     # map continuous-valued predictions to binary labels
+#     y_label = np.sign(y_pred)
+#     y_label[y_label==0] = 1 # map points of hyperplane to +1
+    
+#     ### ========== TODO : START ========== ###
+#     # part 2a: compute classifier performance
+#     if metric=="accuracy":
+#         return metrics.accuracy_score(y_true,y_label)
+#     elif metric=="f1_score":
+#         return metrics.f1_score(y_true, y_label)
+#     elif metric=="auroc":
+#         return metrics.roc_auc_score(y_true, y_pred)
+#     elif metric=="precision":
+#         return metrics.precision_score(y_true, y_label)
+#     elif metric=="sensitivity":
+#         return metrics.recall_score(y_true, y_label)
+#     elif metric=="specificity":
+#         cm=metrics.confusion_matrix(y_true,y_label)
+#         tn, fp, fn, tp = cm.ravel()
+#         return tn/float(tn+fp)
+    
+#     return 0
+
+# def extract_feature_vectors(data, word_list) :
+#     """
    
     
-    Parameters
-    --------------------
-        data            --list of dicts
-        word_list      -- dictionary, (key, value) pairs are (word, index)
+#     Parameters
+#     --------------------
+#         data            --list of dicts
+#         word_list      -- dictionary, (key, value) pairs are (word, index)
     
-    Returns
-    --------------------
-        feature_matrix -- numpy array of shape (n,d)
-                          boolean (0,1) array indicating word presence in a string
-                            n is the number of data points
-                            d is the number of unique words in the text file
-    """
+#     Returns
+#     --------------------
+#         feature_matrix -- numpy array of shape (n,d)
+#                           boolean (0,1) array indicating word presence in a string
+#                             n is the number of data points
+#                             d is the number of unique words in the text file
+#     """
     
-    num_lines = len(data)
-    num_words = len(word_list)
-    feature_matrix = np.zeros((num_lines, num_words))
+#     num_lines = len(data)
+#     num_words = len(word_list)
+#     feature_matrix = np.zeros((num_lines, num_words))
     
    
        
-    #sorted_word_list=sorted(word_list.items(), key=lambda it: it[1]) # the dictionary sort by its values
-    vector_list=[]
-    for email in data:
-        email_vector=[]
-        email_words=email['tokens']
+#     #sorted_word_list=sorted(word_list.items(), key=lambda it: it[1]) # the dictionary sort by its values
+#     vector_list=[]
+#     for email in data:
+#         email_vector=[]
+#         email_words=email['tokens']
         
 
-        for word in word_list:
+#         for word in word_list:
             
-            if word in email_words:
-                email_vector.append(1)
+#             if word in email_words:
+#                 email_vector.append(1)
                
-            else:
-                email_vector.append(0)
-        vector_list.append(email_vector)
+#             else:
+#                 email_vector.append(0)
+#         vector_list.append(email_vector)
 
-    feature_matrix=np.array(vector_list)
+#     feature_matrix=np.array(vector_list)
     
     
-    return feature_matrix #, sorted_word_list
+#     return feature_matrix #, sorted_word_list
 
-def test_performance(clf,x_test,y_test):
-    y_pred=clf.predict(x_test)
-    acc=metrics.accuracy_score(y_test,y_pred)
-    cm=metrics.confusion_matrix(y_test,y_pred)
-    prec=metrics.precision_score(y_test, y_pred)
-    rec=metrics.recall_score(y_test, y_pred)
+# def test_performance(clf,x_test,y_test):
+#     y_pred=clf.predict(x_test)
+#     acc=metrics.accuracy_score(y_test,y_pred)
+#     cm=metrics.confusion_matrix(y_test,y_pred)
+#     prec=metrics.precision_score(y_test, y_pred)
+#     rec=metrics.recall_score(y_test, y_pred)
 
-    return  prec, rec, acc, cm
+#     return  prec, rec, acc, cm
 
-def train_and_test(clf, X_train, y_train, skf, X_test, y_test):
+# def train_and_test(clf, X_train, y_train, skf, X_test, y_test):
     
-    cv_prec, cv_rec, cv_acc=cv_performance(clf, X_train, y_train, skf)
-    print("CV prec", cv_prec)
-    print("CV rec", cv_rec)
-    print("CV acc", cv_acc)
+#     cv_prec, cv_rec, cv_acc=cv_performance(clf, X_train, y_train, skf)
+#     print("CV prec", cv_prec)
+#     print("CV rec", cv_rec)
+#     print("CV acc", cv_acc)
 
-    prec, rec, acc, cm= test_performance(clf, X_test, y_test)
-    print("confusion matrix test set", cm)
-    print("test prec", prec)
-    print("test rec",rec)
-    print("test acc", acc)
+#     prec, rec, acc, cm= test_performance(clf, X_test, y_test)
+#     print("confusion matrix test set", cm)
+#     print("test prec", prec)
+#     print("test rec",rec)
+#     print("test acc", acc)
 
-def cv_performance(clf, X, y, kf) :
-    """
-    from ps6
-    Splits the data, X and y, into k-folds and runs k-fold cross-validation.
-    Trains classifier on k-1 folds and tests on the remaining fold.
-    Calculates the k-fold cross-validation performance metric for classifier
-    by averaging the performance across folds.
+# def cv_performance(clf, X, y, kf) :
+#     """
+#     from ps6
+#     Splits the data, X and y, into k-folds and runs k-fold cross-validation.
+#     Trains classifier on k-1 folds and tests on the remaining fold.
+#     Calculates the k-fold cross-validation performance metric for classifier
+#     by averaging the performance across folds.
     
-    Parameters
-    --------------------
-        clf    -- classifier (instance of SVC)
-        X      -- numpy array of shape (n,d), feature vectors
-                    n = number of examples
-                    d = number of features
-        y      -- numpy array of shape (n,), binary labels {1,-1}
-        kf     -- model_selection.KFold or model_selection.StratifiedKFold
-        metric -- string, option used to select performance measure
+#     Parameters
+#     --------------------
+#         clf    -- classifier (instance of SVC)
+#         X      -- numpy array of shape (n,d), feature vectors
+#                     n = number of examples
+#                     d = number of features
+#         y      -- numpy array of shape (n,), binary labels {1,-1}
+#         kf     -- model_selection.KFold or model_selection.StratifiedKFold
+#         metric -- string, option used to select performance measure
     
-    Returns
-    --------------------
-        score   -- float, average cross-validation performance across k folds
-    """
+#     Returns
+#     --------------------
+#         score   -- float, average cross-validation performance across k folds
+#     """
     
-    precision = []
-    recall=[]
-    accuracy=[]
+#     precision = []
+#     recall=[]
+#     accuracy=[]
 
-    for train, test in kf.split(X, y) :
-        X_train, X_test, y_train, y_test = X[train], X[test], y[train], y[test]
-        clf.fit(X_train, y_train)
-        y_pred = clf.predict(X_test)
-#        score = performance(y_test, y_pred, metric)
-        acc=metrics.accuracy_score(y_test,y_pred)
-        #cm=metrics.confusion_matrix(y_true,y_pred)
-        prec=metrics.precision_score(y_test, y_pred)
-        rec=metrics.recall_score(y_test, y_pred)
+#     for train, test in kf.split(X, y) :
+#         X_train, X_test, y_train, y_test = X[train], X[test], y[train], y[test]
+#         clf.fit(X_train, y_train)
+#         y_pred = clf.predict(X_test)
+# #        score = performance(y_test, y_pred, metric)
+#         acc=metrics.accuracy_score(y_test,y_pred)
+#         #cm=metrics.confusion_matrix(y_true,y_pred)
+#         prec=metrics.precision_score(y_test, y_pred)
+#         rec=metrics.recall_score(y_test, y_pred)
 
-        # if not np.isnan(score) :
-        #     scores.append(score)
+#         # if not np.isnan(score) :
+#         #     scores.append(score)
 
-        precision.append(prec)
-        recall.append(rec)
-        accuracy.append(acc)
+#         precision.append(prec)
+#         recall.append(rec)
+#         accuracy.append(acc)
         
     
         
-    return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean()
+#     return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean()
 
 
 #['X-Gmail-Labels', 'Delivered-To', 'From', 'Return-Path', 'List-ID', 'Mailing-list', 'X-Gm-Message-State', 'To', 'Message-ID', 'List-Post', 'X-Received', 'X-Google-DKIM-Signature', 'In-Reply-To', 'Date', 'List-Archive', 'body', 'Received', 'Received-SPF', 'Authentication-Results', 'X-Original-Authentication-Results', 'X-BeenThere', 'X-Google-Group-Id', 'Reply-To', 'List-Help', 'MIME-Version', 'Precedence', 'X-Spam-Checked-In-Group', 'X-Original-Sender', 'X-GM-THRID', 'References', 'DKIM-Signature', 'List-Unsubscribe', 'Content-Type', 'Subject']
@@ -358,7 +369,7 @@ def main():
     X=np.concatenate((feature_matrix1, feature_matrix2), axis=0)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
-    np.savez_compressed("reply only data" , X=X, y=y)
+    np.savez_compressed("reply_only_data" , X=X, y=y)
     skf= StratifiedKFold(n_splits=10, shuffle=True)
 
     LR=LogisticRegression()
