@@ -409,7 +409,33 @@ def generateBOWData():
    #  np.savez_compressed("init_only_data_train" , X=X_train, y=y_train)
    #  np.savez_compressed("init_only_data_test" , X=X_test, y=y_test)
 
+def pltAttachment():
+    a=np.load("init_only_data_w_time.npz")
+    emails=a['raw_X']
+    y=a['y']
 
+    assert len(emails)==len(y)
+
+    #1 for chat, 0 for dorm
+    dorm_lst=[]
+    chat_lst=[]
+    for index in range(len(y)):
+        email=emails[index]
+        y_val=y[index]
+        # if y_val==0 and email['attachment']==None:
+        #     dorm_lst.append(0) # 0 for no attachment
+        if y_val==0 and email['attachment']!=None:
+            dorm_lst.append(1)
+        # elif y_val==1 and email['attachment']==None:
+        #     chat_lst.append(0) # 0 for no attachment
+        elif y_val==1 and email['attachment']!=None:
+            chat_lst.append(1)    
+
+    plt.figure()
+    plt.hist(chat_lst, alpha=0.5, label='chat')
+    plt.hist(dorm_lst, alpha=0.5, label='dorm')
+    plt.legend()
+    plt.show()
 
 
 def pltTimeData():
@@ -517,12 +543,31 @@ def generateBOWTimeData( ):
 
 
 
+def generateBOWTimeAttachmentData():
+    a=np.load("init_only_data_w_time.npz")
+    emails=a['raw_X']
+    y=a['y']
+    X=a['X']
+    dictionary=a['dictionary']
+    print(len(dictionary))
 
+    print(X.shape)
+    assert len(emails)==len(X)
 
+    newX=[]
+    for index in range(len(X)):
+        email=emails[index]
 
+        if email['attachment']==None:
+            newX.append(np.append(X[index],0))
+        else:
+            newX.append(np.append(X[index],1))
+    newX=np.array(newX)
+    print(newX.shape)
+    np.savez_compressed("init_only_data_time_attach" , X=newX, y=y, raw_X=emails, dictionary=dictionary)
 
 def main(model):
-    a=np.load("init_only_data_w_time.npz")
+    a=np.load("init_only_data_time_attach.npz")
     
     X=a['X']
     
@@ -554,7 +599,8 @@ def main(model):
         print(train_and_test(LR, X_train, y_train, skf, X_test, y_test))
 
     elif model=="RF":
-        RFparameters=RandomForestHyperTuning(X_train, y_train) #need to use these to train
+        #RFparameters=RandomForestHyperTuning(X_train, y_train) #need to use these to train
+        RFparameters={"max_depth":100, "n_estimators":45, "max_features":31, "min_samples_split":80, "min_samples_leaf":5}
         RFtuned= RandomForestClassifier(**RFparameters)
         print("random forest")
         print(train_and_test(RFtuned, X_train, y_train, skf, X_test, y_test))
