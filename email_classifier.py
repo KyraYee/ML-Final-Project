@@ -88,12 +88,11 @@ def extract_feature_vectors(data, word_list) :
         email_vector=[]
         stemmer = SnowballStemmer("english")
         email_tokens=email['tokens']
-
         try:
             email_words= [stemmer.stem(word) for word in email_tokens]
             
 
-            for word in word_list:
+            for word in word_list: # we are ignoring words not in the dictionary
             
                 if word in email_words:
                     email_vector.append(1)
@@ -103,6 +102,7 @@ def extract_feature_vectors(data, word_list) :
             vector_list.append(email_vector)
         except UnicodeDecodeError:
             print("unicode error in extract feature vectors ")
+   
 
     feature_matrix=np.array(vector_list)
     
@@ -115,21 +115,33 @@ def test_performance(clf,x_test,y_test):
     cm=metrics.confusion_matrix(y_test,y_pred)
     prec=metrics.precision_score(y_test, y_pred)
     rec=metrics.recall_score(y_test, y_pred)
+    f1=metrics.f1_score(y_test,y_pred)
+    spec=performance(y_test, y_pred, metric="specificity") 
 
-    return  prec, rec, acc, cm
 
-def train_and_test(clf, X_train, y_train, skf, X_test, y_test, parameters=None):
+    return  prec, rec, acc, spec,f1,  cm
+
+def train_and_test(clf, X_tr, y_train, skf, X_te, y_test, parameters=None):
     
+    scaler=StandardScaler()
+    X_train = scaler.fit_transform(X_tr)
+    X_test=scaler.transform(X_te)
+
+
     cv_prec, cv_rec, cv_acc=cv_performance(clf, X_train, y_train, skf)
     print("CV prec", cv_prec)
     print("CV rec", cv_rec)
     print("CV acc", cv_acc)
+    print("CV f1", 2*cv_prec*cv_rec/float(cv_prec+cv_rec))
 
-    prec, rec, acc, cm= test_performance(clf, X_test, y_test)
-    print("confusion matrix test set", cm)
+    prec, rec, acc, spec, f1, cm =test_performance(clf, X_test, y_test)
+    print("confusion matrix test set")
+    print(cm)
     print("test prec", prec)
     print("test rec",rec)
     print("test acc", acc)
+    print("Test spec", spec)
+    print("test f1",f1)
 
 def cv_performance(clf, X, y, kf) :
     """
@@ -193,33 +205,64 @@ def evaluate(clf,  X_test, y_test):
 
 
 
-def trainAndEvaluate(X_train_unbalanced, y_train,X_test, y_test, balance_dict, parameters_dict):
+# def trainAndEvaluate(X_train_unbalanced, y_train,X_test, y_test, balance_dict, parameters_dict):
 
-    rus = RandomUnderSampler(random_state=42, ratio=balance_dict)
-    X_res, y_train = rus.fit_sample(X_train_unbalanced, y_train )
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_res)
-    print("xtrain shape")
-    print(X_train.shape)
-    print("y train counts")
-    print(np.unique(y_train,return_counts=True))
+#     rus = RandomUnderSampler(random_state=42, ratio=balance_dict)
+#     X_res, y_train = rus.fit_sample(X_train_unbalanced, y_train )
+#     scaler = StandardScaler()
+#     X_train = scaler.fit_transform(X_res)
+#     print("xtrain shape")
+#     print(X_train.shape)
+#     print("y train counts")
+#     print(np.unique(y_train,return_counts=True))
 
-    RF = RandomForestClassifier(n_jobs=-1,**parameters_dict)
-    RF.fit(X_train,y_train)
-    X_test=scaler.transform(X_test)
-    y_pred=RF.predict(X_test)
-    y_pred_train=RF.predict(X_train)   
-    rec=recall_score(y_train, y_pred_train, average='weighted')
-    prec=precision_score(y_train, y_pred_train, average='weighted')
-    cm=confusion_matrix(y_train,y_pred_train)
-
-
-    test_rec,test_prec,test_cm=evaluate(RF, X_test, y_test)
-
-    return RF, rec, prec ,cm, test_rec, test_prec, test_cm
+#     RF = RandomForestClassifier(n_jobs=-1,**parameters_dict)
+#     RF.fit(X_train,y_train)
+#     X_test=scaler.transform(X_test)
+#     y_pred=RF.predict(X_test)
+#     y_pred_train=RF.predict(X_train)   
+#     rec=recall_score(y_train, y_pred_train, average='weighted')
+#     prec=precision_score(y_train, y_pred_train, average='weighted')
+#     cm=confusion_matrix(y_train,y_pred_train)
 
 
+#     test_rec,test_prec,test_cm=evaluate(RF, X_test, y_test)
 
+#     return RF, rec, prec ,cm, test_rec, test_prec, test_cm
+
+
+def selectParamLogReg(X,y, skf):
+    CRange = 10.0**np.arange(-3,4)
+    bestC = 0
+    bestPerformance = 0
+    performances = []
+    kf = model_selection.KFold(n_splits=len(CRange), shuffle=True)
+
+    index=0
+
+    for train_index, val_index in kf.split(X):
+        c=CRange[index]
+        X_train, X_val = X[train_index], X[val_index]
+        y_train, y_val = y[train_index], y[val_index]
+        clf = LogisticRegression(C=c, solver="sag", max_iter=700, n_jobs=-1)
+        scaler=StandardScaler()
+        X_train=scaler.fit_transform(X_train)
+        X_val=scaler.transform(X_val)
+        clf.fit(X_train, y_train)
+        y_pred=clf.predict(X_val)
+        f1=f1_score(y_val, y_pred, average='weighted')
+
+        print("C = " + str(c) + ", performance = " + str(f1))
+        performances.append(performance)
+        if performance > bestPerformance:
+            bestPerformance = performance
+            bestC = c
+
+        index+=1
+
+
+
+    return bestC
 
 def findBestHyperParameterRF(X, y, parameter, parameter_values, known_parameters_dict=None):
     #test each value of parameter on one fold   
@@ -227,7 +270,6 @@ def findBestHyperParameterRF(X, y, parameter, parameter_values, known_parameters
     splits=len(parameter_values)
     index=0
     f1_lst=[]
-    
     
 
     kf = model_selection.KFold(n_splits=splits, shuffle=True)
@@ -269,23 +311,7 @@ def findNonBiasedFeatures(feature_importances, threshold):
     return unbiased_features, biased_features
 
 
-def selectParamLogReg(X,y, skf):
-    CRange = 10.0**np.arange(-3,4)
-    bestC = 0
-    bestPerformance = 0
-    performances = []
-    for c in CRange:
-        clf = LogisticRegression(C=c, solver="sag", max_iter=700, n_jobs=-1)
-        prec,recall, acc = cv_performance(clf, X,y , skf)
 
-        f1= 2*prec*recall/float(prec+recall)
-        print("C = " + str(c) + ", performance = " + str(f1))
-        performances.append(performance)
-        if performance > bestPerformance:
-            bestPerformance = performance
-            bestC = c
-
-    return bestC
 
 
 
@@ -298,7 +324,7 @@ def RandomForestHyperTuning(X, y ):
     choice = input("input max depth parameter ")
     hyperparameters["max_depth"]=choice
 
-    n_estimators = np.arange(20, 80, 4)
+    n_estimators = np.arange(5, 50, 4)
     findBestHyperParameterRF(X, y, "n_estimators", n_estimators, {})
 
     choice = input("input n_estimators parameter ")
@@ -326,60 +352,202 @@ def RandomForestHyperTuning(X, y ):
 
     return hyperparameters
 
+
+
+
 def generateBOWData():
      #1 for chat, 0 for dorm
     chat_data=loadData('north-chat.mbox') 
     dorm_data=loadData('north-dorm.mbox')
-
     print("loaded data")
+
     inits1,replies1=separateReplies(chat_data)
     inits2, replies2=separateReplies(dorm_data)
-   
+
+    inits1=[x for x in inits1 if x['body']!=None]
+    inits2=[x for x in inits2 if x['body']!=None]
+    print("len chat inits", len(inits1))
+    print("len dorm inits", len(inits2))
     print("separated replies")
-    replies1, dictionary1= clean_text(replies1)
-    replies2, dictionary2=clean_text(replies2)
-    merged_dictionary=dictionary1+dictionary2
-    print("len dictionary", len(merged_dictionary))
+
+    y1=np.full(len(inits1),1)
+    y2=np.full(len(inits2),0)
+    y=np.concatenate((y1,y2), axis=0)
+
+    X_unprocessed= inits1+inits2
+
+    assert len(X_unprocessed)==y.shape[0]
+#wo train test split
+
+    X, dictionary= clean_text(X_unprocessed)
+    print("len dictionary", len(dictionary))
+    X=extract_feature_vectors(X, dictionary)
+    print("training data shape", X.shape)
+
+    np.savez_compressed("init_only_data" , X=X, y=y)
+#w train test split
+    # X_train, X_test, y_train, y_test = train_test_split(X_unprocessed, y, test_size=0.15, random_state=47, shuffle=True)
+   
+
+   # #process training
+   #  X_train, dictionary= clean_text(X_train)
+   #  print("len dictionary", len(dictionary))
+    
+   #  X_train=extract_feature_vectors(X_train, dictionary)
+   #  print("training data shape", X_train.shape)
+
+   #  []
+
+   #  #process testing
+   #  X_test=clean_text_no_dict(X_test)
+   #  X_test=extract_feature_vectors(X_test, dictionary)
+   #  print("test data shape", X_test.shape)
+
     
 
-    feature_matrix1=extract_feature_vectors(replies1,merged_dictionary)
-    print(feature_matrix1.shape)
-    y1=np.full(feature_matrix1.shape[0], 1) #north chat is 1
-    print(y1.shape)
+    
+   #  np.savez_compressed("init_only_data_train" , X=X_train, y=y_train)
+   #  np.savez_compressed("init_only_data_test" , X=X_test, y=y_test)
 
-        
-    feature_matrix2=extract_feature_vectors(replies2, merged_dictionary)
-    print(feature_matrix2.shape)
-    y2=np.full(feature_matrix2.shape[0], 0) #nord dorm is 0
 
+
+
+def pltTimeData():
+    #1 for chat, 0 for dorm
+    chat_data = loadData('north-chat.mbox') 
+    dorm_data = loadData('north-dorm.mbox')
+
+    inits1, replies1 = separateReplies(chat_data)
+    inits2, replies2 = separateReplies(dorm_data)
+   
+    doW1 = []   
+    dt_objs1 = []
+    for email in inits1:
+        r = re.compile('.{2}:.{2}:.{2}')
+        time_sent = int(email['Date'][-14:-12])
+        doW = email['Date'][:3]
+        doW1.append(doWtoNum(doW))
+        # if r.match(time_sent):
+            # dt_obj = dt.datetime.strptime(time_sent, '%H:%M:%S')
+        if time_sent < 24:
+            dt_objs1.append(time_sent)
+
+    doW2 = []
+    dt_objs2 = []
+    for email in inits2:
+        r = re.compile('.{2}:.{2}:.{2}')
+        time_sent = int(email['Date'][-14:-12])
+        doW = email['Date'][:3]
+        doW2.append(doWtoNum(doW))
+        # if r.match(time_sent):
+            # dt_obj = dt.datetime.strptime(time_sent, '%H:%M:%S')
+        if time_sent < 24:
+            dt_objs2.append(time_sent)
+
+
+    # plt.figure()
+    # plt.hist(dt_objs1, alpha=0.5, label='chat')
+    # plt.hist(dt_objs2, alpha=0.5, label='dorm')
+    # plt.legend()
+    # plt.show()
+
+    plt.figure()
+    plt.hist(doW1, alpha=0.5, label='chat')
+    plt.hist(doW2, alpha=0.5, label='dorm')
+    plt.legend()
+    plt.show()
+
+
+    date = 'Fri, 6 May 2016 18:49:54 -0700'
+
+
+
+
+
+def generateBOWTimeData( ):
+     #1 for chat, 0 for dorm
+    chat_data=loadData('north-chat.mbox') 
+    dorm_data=loadData('north-dorm.mbox')
+    print("loaded data")
+
+    inits1,replies1=separateReplies(chat_data)
+    inits2, replies2=separateReplies(dorm_data)
+
+    inits1=[x for x in inits1 if x['body']!=None]
+    inits2=[x for x in inits2 if x['body']!=None]
+    print("len chat inits", len(inits1))
+    print("len dorm inits", len(inits2))
+    print("separated replies")
+
+    y1=np.full(len(inits1),1)
+    y2=np.full(len(inits2),0)
     y=np.concatenate((y1,y2), axis=0)
-    X=np.concatenate((feature_matrix1, feature_matrix2), axis=0)
-    np.savez_compressed("reply_only_data" , X=X, y=y)
+
+    X_unprocessed= inits1+inits2
+
+    assert len(X_unprocessed)==y.shape[0]
+
+    #get BOW
+    raw_X, dictionary= clean_text(X_unprocessed)
+    print("len dictionary", len(dictionary))
+    X=extract_feature_vectors(raw_X, dictionary)
+    print(" data shape", X.shape)
+
+    #get day of week and time
+    time_data=[]
+    for email in raw_X:
+        time_sent = int(email['Date'][-14:-12])
+
+        doW = email['Date'][:3]
+        doW=doWtoNum(doW)
+        time_data.append([doW, time_sent])
+
+    time_data=np.array(time_data)
+    assert time_data.shape[0]==X.shape[0]
+
+    #combine
+    Xfinal=[]
+    for index in range(X.shape[0]):
+        Xfinal.append(np.concatenate((time_data[index],X[index]), axis=0))
+
+    Xfinal=np.array(Xfinal)
+    print("data with time shape", Xfinal.shape)
+    
+    np.savez_compressed("init_only_data_w_time" , X=Xfinal, y=y, raw_X=raw_X, dictionary=dictionary )
 
 
 
 
 
-def learningCurve(X, y , clf):
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
 
 
 def main(model):
-    #1 for chat, 0 for dorm
-    a=np.load("reply_only_data.npz")
-
+    a=np.load("init_only_data_w_time.npz")
+    
     X=a['X']
+    
     y=a['y']
 
-    print("extracted feature vectors")
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
+    #1 for chat, 0 for dorm
+    # train=np.load("init_only_data_train.npz")
+    
+    # X_train=train['X']
+    
+    # y_train=train['y']
+
+    # test=np.load("init_only_data_test.npz")
+    # X_test=test['X']
+
+    # y_test=test['y']
+
+    print("extracted feature vectors")
    
     skf= StratifiedKFold(n_splits=10, shuffle=True)
 
     if model=="log reg":
-       # c=selectParamLogReg(X_train,y_train, skf)
-        LR=LogisticRegression(C=0.01)
+        c=selectParamLogReg(X_train,y_train, skf)
+        LR=LogisticRegression(C=c)
        
        
         print("log reg")
