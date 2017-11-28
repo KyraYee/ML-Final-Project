@@ -339,48 +339,52 @@ def seeFeature(data, feature):
 #     return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean()
 
 
-#['X-Gmail-Labels', 'Delivered-To', 'From', 'Return-Path', 'List-ID', 'Mailing-list', 'X-Gm-Message-State', 'To', 'Message-ID', 'List-Post', 'X-Received', 'X-Google-DKIM-Signature', 'In-Reply-To', 'Date', 'List-Archive', 'body', 'Received', 'Received-SPF', 'Authentication-Results', 'X-Original-Authentication-Results', 'X-BeenThere', 'X-Google-Group-Id', 'Reply-To', 'List-Help', 'MIME-Version', 'Precedence', 'X-Spam-Checked-In-Group', 'X-Original-Sender', 'X-GM-THRID', 'References', 'DKIM-Signature', 'List-Unsubscribe', 'Content-Type', 'Subject']
+#['X-Gmail-Labels', 'Delivered-To', 'From', 'Return-Path', 'List-ID', 'Mailing-list', 'X-Gm-Message-State',
+# 'To', 'Message-ID', 'List-Post', 'X-Received', 'X-Google-DKIM-Signature', 'In-Reply-To', 'Date', 'List-Archive',
+# 'body', 'Received', 'Received-SPF', 'Authentication-Results', 'X-Original-Authentication-Results', 'X-BeenThere', 
+#'X-Google-Group-Id', 'Reply-To', 'List-Help', 'MIME-Version', 'Precedence', 'X-Spam-Checked-In-Group', 
+#'X-Original-Sender', 'X-GM-THRID', 'References', 'DKIM-Signature', 'List-Unsubscribe', 'Content-Type', 'Subject']
 def main():
     #1 for chat, 0 for dorm
     chat_data=loadData('north-chat.mbox') 
-    dorm_data=loadData('north-dorm.mbox')
+    #dorm_data=loadData('north-dorm.mbox')
 
     inits1,replies1=separateReplies(chat_data)
-    inits2, replies2=separateReplies(dorm_data)
+    #inits2, replies2=separateReplies(dorm_data)
    
     
     replies1, dictionary1= clean_text(replies1)
-    replies2, dictionary2=clean_text(replies2)
-    merged_dictionary=dictionary1+dictionary2
-    print("len dictionary", len(merged_dictionary))
+   # replies2, dictionary2=clean_text(replies2)
+   # merged_dictionary=dictionary1+dictionary2
+    # print("len dictionary", len(merged_dictionary))
     
 
-    feature_matrix1=extract_feature_vectors(replies1,merged_dictionary)
-    print(feature_matrix1.shape)
-    y1=np.full(feature_matrix1.shape[0], 1)
-    print(y1.shape)
+    # feature_matrix1=extract_feature_vectors(replies1,merged_dictionary)
+    # print(feature_matrix1.shape)
+    # y1=np.full(feature_matrix1.shape[0], 1)
+    # print(y1.shape)
 
         
-    feature_matrix2=extract_feature_vectors(replies2, merged_dictionary)
-    print(feature_matrix2.shape)
-    y2=np.full(feature_matrix2.shape[0], 0)
+    # feature_matrix2=extract_feature_vectors(replies2, merged_dictionary)
+    # print(feature_matrix2.shape)
+    # y2=np.full(feature_matrix2.shape[0], 0)
 
-    y=np.concatenate((y1,y2), axis=0)
-    X=np.concatenate((feature_matrix1, feature_matrix2), axis=0)
+    # y=np.concatenate((y1,y2), axis=0)
+    # X=np.concatenate((feature_matrix1, feature_matrix2), axis=0)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
-    np.savez_compressed("reply_only_data" , X=X, y=y)
-    skf= StratifiedKFold(n_splits=10, shuffle=True)
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
+    # np.savez_compressed("reply_only_data" , X=X, y=y)
+    # skf= StratifiedKFold(n_splits=10, shuffle=True)
 
-    LR=LogisticRegression()
-    RF=RandomForestClassifier()
+    # LR=LogisticRegression()
+    # RF=RandomForestClassifier()
     
-    print("log reg")
-    train_and_test(LR, X_train, y_train, skf, X_test, y_test)
-    print("random forest")
-    train_and_test(RF, X_train, y_train, skf, X_test, y_test)
-    # with open('iniial_model_BOW_no_replies.pickle', 'wb') as handle:
-    #     pickle.dump(clf, handle)
+    # print("log reg")
+    # train_and_test(LR, X_train, y_train, skf, X_test, y_test)
+    # print("random forest")
+    # train_and_test(RF, X_train, y_train, skf, X_test, y_test)
+    # # with open('iniial_model_BOW_no_replies.pickle', 'wb') as handle:
+    # #     pickle.dump(clf, handle)
 
 
 

@@ -212,6 +212,8 @@ def trainAndEvaluate(X_train_unbalanced, y_train,X_test, y_test, balance_dict, p
     rec=recall_score(y_train, y_pred_train, average='weighted')
     prec=precision_score(y_train, y_pred_train, average='weighted')
     cm=confusion_matrix(y_train,y_pred_train)
+
+
     test_rec,test_prec,test_cm=evaluate(RF, X_test, y_test)
 
     return RF, rec, prec ,cm, test_rec, test_prec, test_cm
@@ -219,7 +221,7 @@ def trainAndEvaluate(X_train_unbalanced, y_train,X_test, y_test, balance_dict, p
 
 
 
-def findBestHyperParameter(X, y, parameter, parameter_values, known_parameters_dict):
+def findBestHyperParameterRF(X, y, parameter, parameter_values, known_parameters_dict=None):
     #test each value of parameter on one fold   
     plt.figure()
     splits=len(parameter_values)
@@ -266,44 +268,65 @@ def findNonBiasedFeatures(feature_importances, threshold):
             unbiased_features.append(index)
     return unbiased_features, biased_features
 
+
+def selectParamLogReg(X,y, skf):
+    CRange = 10.0**np.arange(-3,4)
+    bestC = 0
+    bestPerformance = 0
+    performances = []
+    for c in CRange:
+        clf = LogisticRegression(C=c, solver="sag", max_iter=700, n_jobs=-1)
+        prec,recall, acc = cv_performance(clf, X,y , skf)
+
+        f1= 2*prec*recall/float(prec+recall)
+        print("C = " + str(c) + ", performance = " + str(f1))
+        performances.append(performance)
+        if performance > bestPerformance:
+            bestPerformance = performance
+            bestC = c
+
+    return bestC
+
+
+
 def RandomForestHyperTuning(X, y ):
 
     hyperparameters={}
-    max_depth=range(10,70,5)
-    findBestHyperParameter(X, y, "max_depth", max_depth, {})
+    max_depth=range(20,120,5)
+    findBestHyperParameterRF(X, y, "max_depth", max_depth, {})
 
     choice = input("input max depth parameter ")
     hyperparameters["max_depth"]=choice
 
-    n_estimators = np.arange(1, 50, 4)
-    findBestHyperParameter(X, y, "n_estimators", n_estimators, {})
+    n_estimators = np.arange(20, 80, 4)
+    findBestHyperParameterRF(X, y, "n_estimators", n_estimators, {})
 
     choice = input("input n_estimators parameter ")
     hyperparameters["n_estimators"]=choice
 
-    end_Range=min(X.shape[1],50)
+    end_Range=min(X.shape[1],100)
 
     features_range = range(1, end_Range, 5)
-    findBestHyperParameter(X, y, "max_features", features_range, {})
+    findBestHyperParameterRF(X, y, "max_features", features_range, {})
 
     choice = input("input max_features parameter ")
     hyperparameters["max_features"]=choice
 
-    min_samples_split = range(2, 500, 40)
-    findBestHyperParameter(X, y, "min_samples_split", min_samples_split, {})
+    min_samples_split = range(20, 100, 5)
+    findBestHyperParameterRF(X, y, "min_samples_split", min_samples_split, {})
 
     choice = input("input min_samples_split parameter ")
     hyperparameters["min_samples_split"]=choice
 
     min_samples_leaf = range(1, 500, 30)
-    findBestHyperParameter(X, y, "min_samples_leaf", min_samples_leaf, {})       
+    findBestHyperParameterRF(X, y, "min_samples_leaf", min_samples_leaf, {})       
     choice = input("input min_samples_leaf parameter ")
     hyperparameters["min_samples_leaf"]=choice
 
 
     return hyperparameters
 
-def generateNumericData():
+def generateBOWData():
      #1 for chat, 0 for dorm
     chat_data=loadData('north-chat.mbox') 
     dorm_data=loadData('north-dorm.mbox')
@@ -334,6 +357,14 @@ def generateNumericData():
     np.savez_compressed("reply_only_data" , X=X, y=y)
 
 
+
+
+
+def learningCurve(X, y , clf):
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
+
+
 def main(model):
     #1 for chat, 0 for dorm
     a=np.load("reply_only_data.npz")
@@ -344,21 +375,21 @@ def main(model):
     print("extracted feature vectors")
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
    
-   
-
-    RFparameters=RandomForestHyperTuning(X_train, y_train) #need to use these to train
-    LR=LogisticRegression()
-    RF=RandomForestClassifier()
     skf= StratifiedKFold(n_splits=10, shuffle=True)
-    print("log reg")
-    print(train_and_test(LR, X_train, y_train, skf, X_test, y_test))
 
-    print("random forest")
-    print(train_and_test(RF, X_train, y_train, skf, X_test, y_test))
+    if model=="log reg":
+       # c=selectParamLogReg(X_train,y_train, skf)
+        LR=LogisticRegression(C=0.01)
+       
+       
+        print("log reg")
+        print(train_and_test(LR, X_train, y_train, skf, X_test, y_test))
 
-    RFtuned= RandomForestClassifier(**RFparameters)
-    print("random forest")
-    print(train_and_test(RFtuned, X_train, y_train, skf, X_test, y_test))
+    elif model=="RF":
+        RFparameters=RandomForestHyperTuning(X_train, y_train) #need to use these to train
+        RFtuned= RandomForestClassifier(**RFparameters)
+        print("random forest")
+        print(train_and_test(RFtuned, X_train, y_train, skf, X_test, y_test))
    
    
 
