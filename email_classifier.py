@@ -18,6 +18,7 @@ from mbox_reader import *
 from nltk.stem.snowball import SnowballStemmer
 
 
+
 def performance(y_true, y_pred, metric="accuracy") :
     """
     #from ps 6
@@ -58,6 +59,50 @@ def performance(y_true, y_pred, metric="accuracy") :
         return tn/float(tn+fp)
     
     return 0
+
+def getWordCounts(email_tokens):
+    counts={}
+    try:
+            stemmer = SnowballStemmer("english")
+            email_words= [stemmer.stem(word) for word in email_tokens]
+            for token in email_words:
+                if token in counts:
+                    counts[token]+=1
+                else:
+                    counts[token]=1
+    except UnicodeDecodeError:
+        print("token list unicode error")
+
+    return counts
+
+def extractFeatureVectorCounts(data, dictionary):
+
+    X=[]
+    for email in data:
+        email_vector=[]
+        
+        email_tokens=email['tokens']
+        if email_tokens!=None:
+            counts=getWordCounts(email_tokens)
+            for word in dictionary:
+                if word in counts:
+                    email_vector.append(counts[word])
+                else:
+                    email_vector.append(0)
+            X.append(email_vector)
+        else:
+            print("no tokens")
+            X.append(None)
+
+    X=np.array(X)
+
+    return X
+
+
+
+
+
+
 
 def extract_feature_vectors(data, word_list) :
     """
@@ -128,11 +173,11 @@ def train_and_test(clf, X_tr, y_train, skf, X_te, y_test, parameters=None):
     X_test=scaler.transform(X_te)
 
 
-    cv_prec, cv_rec, cv_acc=cv_performance(clf, X_train, y_train, skf)
+    cv_prec, cv_rec, cv_acc, cv_f1=cv_performance(clf, X_train, y_train, skf)
     print("CV prec", cv_prec)
     print("CV rec", cv_rec)
     print("CV acc", cv_acc)
-    print("CV f1", 2*cv_prec*cv_rec/float(cv_prec+cv_rec))
+    print("CV f1", cv_f1)
 
     prec, rec, acc, spec, f1, cm =test_performance(clf, X_test, y_test)
     print("confusion matrix test set")
@@ -142,6 +187,8 @@ def train_and_test(clf, X_tr, y_train, skf, X_te, y_test, parameters=None):
     print("test acc", acc)
     print("Test spec", spec)
     print("test f1",f1)
+
+
 
 def cv_performance(clf, X, y, kf) :
     """
@@ -169,6 +216,7 @@ def cv_performance(clf, X, y, kf) :
     precision = []
     recall=[]
     accuracy=[]
+    f1_lst=[]
 
     for train, test in kf.split(X, y) :
         X_train, X_test, y_train, y_test = X[train], X[test], y[train], y[test]
@@ -179,17 +227,21 @@ def cv_performance(clf, X, y, kf) :
         #cm=metrics.confusion_matrix(y_true,y_pred)
         prec=metrics.precision_score(y_test, y_pred)
         rec=metrics.recall_score(y_test, y_pred)
-
+        f1=metrics.f1_score(y_test, y_pred)
         # if not np.isnan(score) :
         #     scores.append(score)
 
         precision.append(prec)
         recall.append(rec)
         accuracy.append(acc)
+        f1_lst.append(f1)
+
+
+
         
     
         
-    return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean()
+    return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean(), np.array(f1_lst).mean()
 
 def evaluate(clf,  X_test, y_test):
     #take in already fitted model
@@ -202,33 +254,80 @@ def evaluate(clf,  X_test, y_test):
     cm=confusion_matrix(y_test,y_pred)
     return recall, precision, cm
 
+def tuneSVM(X,y):
+    
+    bestPerformance = 0
+    bestTuple = (0, 0)
+    gammaRange = 10.0**np.arange(-3, 4)
+    CRange = 10.0**np.arange(-3, 4)
+    index=0
+    params=[]
+
+    
+    print("tuning SVM")
+    for gamma in gammaRange:
+        for c in CRange:
+            params.append((gamma,c))
+
+
+    kf = model_selection.KFold(n_splits=len(params), shuffle=True)
+   
+    
+    for train_index, val_index in kf.split(X):
+        c=params[index][1]
+        gamma=params[index][0]
+        clf = SVC(kernel='rbf', C=c, gamma=gamma, class_weight='balanced')
+       
+        X_train, X_val = X[train_index], X[val_index]
+        y_train, y_val = y[train_index], y[val_index]
+       
+        scaler=StandardScaler()
+        X_train=scaler.fit_transform(X_train)
+        X_val=scaler.transform(X_val)
+        clf.fit(X_train, y_train)
+        y_pred=clf.predict(X_val)
+        f1=f1_score(y_val, y_pred, average='weighted')
+
+        print("C = " + str(c) + ", gamma= "+str(gamma) +", performance = " + str(f1))
+        score=f1
+        index+=1
+
+        if performance > bestPerformance:
+            bestPerformance = performance
+            bestC = c
+            bestGamma=gamma      
+
+    return (bestC, bestGamma)
+
+    # bestPerformance = 0
+    # bestTuple = (0, 0)
+    # gammaRange = 10.0**np.arange(-3, 4)
+    # CRange = 10.0**np.arange(-3, 4)
+    # index=0
+    
+    # print("tuning SVM")
+    # for gamma in gammaRange:
+    #     for c in CRange:
+    #         kf = model_selection.KFold(n_splits=10, shuffle=True)
+            
+    #         clf = SVC(kernel='sigmoid', C=c, gamma=gamma, class_weight='balanced')
+    #         scaler=StandardScaler()
+    #         X=scaler.fit_transform(X)
+    #         prec, recall, acc, f1=cv_performance(clf, X, y, kf )
+
+    #         score=f1 
 
 
 
-# def trainAndEvaluate(X_train_unbalanced, y_train,X_test, y_test, balance_dict, parameters_dict):
+           
+    #         print("gamma = " + str(gamma) + ", C = " + str(c) + ", performance = " + str(score))
+    #         if score > bestPerformance:
+    #             bestPerformance = score
+    #             bestTuple = (gamma, c)
 
-#     rus = RandomUnderSampler(random_state=42, ratio=balance_dict)
-#     X_res, y_train = rus.fit_sample(X_train_unbalanced, y_train )
-#     scaler = StandardScaler()
-#     X_train = scaler.fit_transform(X_res)
-#     print("xtrain shape")
-#     print(X_train.shape)
-#     print("y train counts")
-#     print(np.unique(y_train,return_counts=True))
-
-#     RF = RandomForestClassifier(n_jobs=-1,**parameters_dict)
-#     RF.fit(X_train,y_train)
-#     X_test=scaler.transform(X_test)
-#     y_pred=RF.predict(X_test)
-#     y_pred_train=RF.predict(X_train)   
-#     rec=recall_score(y_train, y_pred_train, average='weighted')
-#     prec=precision_score(y_train, y_pred_train, average='weighted')
-#     cm=confusion_matrix(y_train,y_pred_train)
+    # return bestTuple
 
 
-#     test_rec,test_prec,test_cm=evaluate(RF, X_test, y_test)
-
-#     return RF, rec, prec ,cm, test_rec, test_prec, test_cm
 
 
 def selectParamLogReg(X,y, skf):
@@ -318,7 +417,7 @@ def findNonBiasedFeatures(feature_importances, threshold):
 def RandomForestHyperTuning(X, y ):
 
     hyperparameters={}
-    max_depth=range(20,120,5)
+    max_depth=range(5,50,3)
     findBestHyperParameterRF(X, y, "max_depth", max_depth, {})
 
     choice = input("input max depth parameter ")
@@ -338,7 +437,7 @@ def RandomForestHyperTuning(X, y ):
     choice = input("input max_features parameter ")
     hyperparameters["max_features"]=choice
 
-    min_samples_split = range(20, 100, 5)
+    min_samples_split = range(4, 800, 30)
     findBestHyperParameterRF(X, y, "min_samples_split", min_samples_split, {})
 
     choice = input("input min_samples_split parameter ")
@@ -409,6 +508,34 @@ def generateBOWData():
    #  np.savez_compressed("init_only_data_train" , X=X_train, y=y_train)
    #  np.savez_compressed("init_only_data_test" , X=X_test, y=y_test)
 
+def pltEmailLength():
+    a=np.load("init_only_data_w_time.npz")
+    emails=a['raw_X']
+    y=a['y']
+
+    assert len(emails)==len(y)
+
+    #1 for chat, 0 for dorm
+    dorm_lst=[]
+    chat_lst=[]
+    for index in range(len(y)):
+        email=emails[index]
+        y_val=y[index]
+        
+        if y_val==0:
+            dorm_lst.append(len(email['tokens']))
+        
+        elif y_val==1: 
+            chat_lst.append(len(email['tokens']))    
+
+    plt.figure()
+    plt.hist(chat_lst, alpha=0.5, label='chat')
+    plt.hist(dorm_lst, alpha=0.5, label='dorm')
+    plt.legend()
+    plt.title("Number of Words Per Email")
+    plt.xlabel("Number of Words")
+    plt.show()
+
 def pltAttachment():
     a=np.load("init_only_data_w_time.npz")
     emails=a['raw_X']
@@ -422,16 +549,15 @@ def pltAttachment():
     for index in range(len(y)):
         email=emails[index]
         y_val=y[index]
-        # if y_val==0 and email['attachment']==None:
-        #     dorm_lst.append(0) # 0 for no attachment
+        
         if y_val==0 and email['attachment']!=None:
             dorm_lst.append(1)
-        # elif y_val==1 and email['attachment']==None:
-        #     chat_lst.append(0) # 0 for no attachment
+       
         elif y_val==1 and email['attachment']!=None:
             chat_lst.append(1)    
 
     plt.figure()
+    plt.title("Number of Emails with Attachment")
     plt.hist(chat_lst, alpha=0.5, label='chat')
     plt.hist(dorm_lst, alpha=0.5, label='dorm')
     plt.legend()
@@ -559,12 +685,49 @@ def generateBOWTimeAttachmentData():
         email=emails[index]
 
         if email['attachment']==None:
-            newX.append(np.append(X[index],0))
+            newX.append(np.append(0,X[index]))
         else:
-            newX.append(np.append(X[index],1))
+            newX.append(np.append(1,X[index]))
     newX=np.array(newX)
     print(newX.shape)
     np.savez_compressed("init_only_data_time_attach" , X=newX, y=y, raw_X=emails, dictionary=dictionary)
+
+
+def generateBOWCounts():
+    a=np.load("init_only_data_time_attach.npz")
+    emails=a['raw_X']
+    y=a['y']
+    X=a['X']
+    print("X shape", X.shape)
+    dictionary=a['dictionary']
+    raw_data=a['raw_X']
+
+    nonBOW=X[:,:3] #just want time, Dow, and attachment
+    X=extractFeatureVectorCounts(raw_data, dictionary)
+
+    newX=np.concatenate((nonBOW, X), axis=1)
+    print("new X shape", newX.shape)
+    np.savez_compressed("init_only_data_time_attach_count" , X=newX, y=y, raw_X=raw_data, dictionary=dictionary)
+
+def generateBOWEmailLengthTimeAttach():
+    a=np.load("init_only_data_time_attach.npz")
+    emails=a['raw_X']
+    y=a['y']
+    X=a['X']
+    dictionary=a['dictionary']
+    print(len(dictionary))
+
+    print(X.shape)
+    assert len(emails)==len(X)
+
+    newX=[]
+    for index in range(len(X)):
+        email=emails[index]
+        newX.append(np.append(len(email['tokens']),X[index]))
+        
+    newX=np.array(newX)
+    print(newX.shape)
+    np.savez_compressed("init_only_data_time_attach_len" , X=newX, y=y, raw_X=emails, dictionary=dictionary)
 
 def main(model):
     a=np.load("init_only_data_time_attach.npz")
@@ -572,19 +735,9 @@ def main(model):
     X=a['X']
     
     y=a['y']
+    print(np.unique(y, return_counts=True))
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
-    #1 for chat, 0 for dorm
-    # train=np.load("init_only_data_train.npz")
-    
-    # X_train=train['X']
-    
-    # y_train=train['y']
-
-    # test=np.load("init_only_data_test.npz")
-    # X_test=test['X']
-
-    # y_test=test['y']
 
     print("extracted feature vectors")
    
@@ -601,17 +754,64 @@ def main(model):
     elif model=="RF":
         #RFparameters=RandomForestHyperTuning(X_train, y_train) #need to use these to train
         RFparameters={"max_depth":100, "n_estimators":45, "max_features":31, "min_samples_split":80, "min_samples_leaf":5}
+        #RFparameters={"max_depth":15, "n_estimators":16, "max_features":50, "min_samples_split":245, "min_samples_leaf":35}
         RFtuned= RandomForestClassifier(**RFparameters)
         print("random forest")
         print(train_and_test(RFtuned, X_train, y_train, skf, X_test, y_test))
-   
-   
+
+
+        y_score=RFtuned.predict_log_proba(X_test)
+        print(y_score[0:100])
+        print(y_score.shape)
+        print(y_test.shape)
+        precision, recall, thresholds = precision_recall_curve(y_test, y_score[:,0])
+        plt.step(recall, precision, color='b', alpha=0.2, where='post')
+        plt.fill_between(recall, precision, step='post', alpha=0.2, color='b')
+
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.ylim([0.0, 1.05])
+        plt.xlim([0.0, 1.0])
+        plt.title('2-class Precision-Recall curve')
+        plt.show()
+
+    elif model=="SVM":
+
+        SVMparameters=tuneSVM(X_train, y_train)
+        # c=0.01
+        # gamma=0.1
+        gamma=SVMparameters[1]
+        c=SVMparameters[0]
+        SVM = SVC(kernel='rbf', C=c, gamma=gamma, class_weight='balanced')
+        train_and_test(SVM, X_train, y_train, skf, X_test, y_test)
+
+
+        with open("SVMrbf.pkl","wb") as f:
+            pickle.dump(SVM, f)
+
+        # y_score=SVM.decision_function(X_test)
+        # print(y_score[0:100])
+        # print(y_score.shape)
+        # print(y_test.shape)
+        # precision, recall, thresholds = precision_recall_curve(y_test, y_score[:,0])
+        # plt.step(recall, precision, color='b', alpha=0.2, where='post')
+        # plt.fill_between(recall, precision, step='post', alpha=0.2, color='b')
+
+
+
+        # plt.xlabel('Recall')
+        # plt.ylabel('Precision')
+        # plt.ylim([0.0, 1.05])
+        # plt.xlim([0.0, 1.0])
+        # plt.title('2-class Precision-Recall curve')
+        # plt.show()
+
 
 
 
 
 parser = argparse.ArgumentParser(description='Run classification')
-parser.add_argument('--model', dest='model', type=str, default='log reg', help='type of classifier to use')
+parser.add_argument('--model', dest='model', type=str, default='RF', help='type of classifier to use')
 #parser.add_argument('--dataWithFips', dest='dataWithFips', type=str, default='data/census_data_filtered_disability_with_fips.npz', help='The data set in dictionary fo')
 
 
