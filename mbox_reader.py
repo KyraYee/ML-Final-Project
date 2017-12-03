@@ -132,7 +132,7 @@ def clean_text2(data):
                     if clean_word not in dictionary and "@" not in clean_word :
 
                         dictionary[clean_word]=1
-                    else if clean_word in dictionary and "@" not in clean_word :
+                    elif clean_word in dictionary and "@" not in clean_word :
                         dictionary[clean_word]+=1
 
                 except UnicodeDecodeError:

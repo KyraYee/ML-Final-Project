@@ -40,8 +40,9 @@ def performance(y_true, y_pred, metric="specificity") :
         score  -- float, performance score
     """
     # map continuous-valued predictions to binary labels
-    y_label = np.sign(y_pred)
-    y_label[y_label==0] = 1 # map points of hyperplane to +1
+    # y_label = np.sign(y_pred)
+    # y_label[y_label==0] = 1 # map points of hyperplane to +1
+    y_label=y_pred
     
     ### ========== TODO : START ========== ###
     # part 2a: compute classifier performance
@@ -845,14 +846,6 @@ def main(model, pca):
         scaler=StandardScaler()
         X_train=scaler.fit_transform(X_train)
         X_test=scaler.transform(X_test)
-
-        #test how many components to explain variance
-        # for n in range(900,1200, 30):
-        #     pca=PCA(n_components=n, svd_solver='randomized')
-        #     pca.fit(X_train)
-        #     print(str(n)+"components")
-        #     print("variance")
-        #     print( sum(pca.explained_variance_ratio_))
 
         n_components=range(720, 1200,30)
         
