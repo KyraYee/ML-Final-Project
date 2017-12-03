@@ -1,10 +1,11 @@
 import numpy as np
 from sklearn import linear_model
+from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.datasets import make_classification
 from sklearn.metrics import recall_score, precision_score, precision_recall_curve, roc_curve, confusion_matrix,f1_score
 import pickle
@@ -16,10 +17,11 @@ import os
 from mbox_reader import *
 
 from nltk.stem.snowball import SnowballStemmer
+from sklearn.decomposition import PCA
 
 
 
-def performance(y_true, y_pred, metric="accuracy") :
+def performance(y_true, y_pred, metric="specificity") :
     """
     #from ps 6
     Calculates the performance metric based on the agreement between the 
@@ -58,7 +60,9 @@ def performance(y_true, y_pred, metric="accuracy") :
         tn, fp, fn, tp = cm.ravel()
         return tn/float(tn+fp)
     
-    return 0
+    cm=metrics.confusion_matrix(y_true,y_label)
+    tn, fp, fn, tp = cm.ravel()
+    return tn/float(tn+fp)
 
 def getWordCounts(email_tokens):
     counts={}
@@ -166,18 +170,25 @@ def test_performance(clf,x_test,y_test):
 
     return  prec, rec, acc, spec,f1,  cm
 
-def train_and_test(clf, X_tr, y_train, skf, X_te, y_test, parameters=None):
+def train_and_test(clf, X_tr, y_train, skf, X_te, y_test, parameters=None, standardized=False):
     
-    scaler=StandardScaler()
-    X_train = scaler.fit_transform(X_tr)
-    X_test=scaler.transform(X_te)
+    if not standardized:
+        print("doing feature standardization")
+        scaler=StandardScaler()
+        X_train = scaler.fit_transform(X_tr)
+        X_test=scaler.transform(X_te)
+    else:
+        X_train=X_tr
+        X_test=X_te
 
 
-    cv_prec, cv_rec, cv_acc, cv_f1=cv_performance(clf, X_train, y_train, skf)
+
+    cv_prec, cv_rec, cv_acc, cv_f1, cv_spec=cv_performance(clf, X_train, y_train, skf)
     print("CV prec", cv_prec)
     print("CV rec", cv_rec)
     print("CV acc", cv_acc)
     print("CV f1", cv_f1)
+    print("CV spec", cv_spec)
 
     prec, rec, acc, spec, f1, cm =test_performance(clf, X_test, y_test)
     print("confusion matrix test set")
@@ -217,6 +228,7 @@ def cv_performance(clf, X, y, kf) :
     recall=[]
     accuracy=[]
     f1_lst=[]
+    specificity=[]
 
     for train, test in kf.split(X, y) :
         X_train, X_test, y_train, y_test = X[train], X[test], y[train], y[test]
@@ -228,9 +240,11 @@ def cv_performance(clf, X, y, kf) :
         prec=metrics.precision_score(y_test, y_pred)
         rec=metrics.recall_score(y_test, y_pred)
         f1=metrics.f1_score(y_test, y_pred)
+        spec=performance(y_test, y_pred, metric="specificity") 
+
         # if not np.isnan(score) :
         #     scores.append(score)
-
+        specificity.append(spec)
         precision.append(prec)
         recall.append(rec)
         accuracy.append(acc)
@@ -241,7 +255,7 @@ def cv_performance(clf, X, y, kf) :
         
     
         
-    return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean(), np.array(f1_lst).mean()
+    return np.array(precision).mean(), np.array(recall).mean(), np.array(accuracy).mean(), np.array(f1_lst).mean(), np.array(specificity).mean()
 
 def evaluate(clf,  X_test, y_test):
     #take in already fitted model
@@ -254,7 +268,7 @@ def evaluate(clf,  X_test, y_test):
     cm=confusion_matrix(y_test,y_pred)
     return recall, precision, cm
 
-def tuneSVM(X,y):
+def tuneSVM(X,y, standardized=False):
     
     bestPerformance = 0
     bestTuple = (0, 0)
@@ -281,9 +295,10 @@ def tuneSVM(X,y):
         X_train, X_val = X[train_index], X[val_index]
         y_train, y_val = y[train_index], y[val_index]
        
-        scaler=StandardScaler()
-        X_train=scaler.fit_transform(X_train)
-        X_val=scaler.transform(X_val)
+        if not standardized:
+            scaler=StandardScaler()
+            X_train=scaler.fit_transform(X_train)
+            X_val=scaler.transform(X_val)
         clf.fit(X_train, y_train)
         y_pred=clf.predict(X_val)
         f1=f1_score(y_val, y_pred, average='weighted')
@@ -299,38 +314,10 @@ def tuneSVM(X,y):
 
     return (bestC, bestGamma)
 
-    # bestPerformance = 0
-    # bestTuple = (0, 0)
-    # gammaRange = 10.0**np.arange(-3, 4)
-    # CRange = 10.0**np.arange(-3, 4)
-    # index=0
-    
-    # print("tuning SVM")
-    # for gamma in gammaRange:
-    #     for c in CRange:
-    #         kf = model_selection.KFold(n_splits=10, shuffle=True)
-            
-    #         clf = SVC(kernel='sigmoid', C=c, gamma=gamma, class_weight='balanced')
-    #         scaler=StandardScaler()
-    #         X=scaler.fit_transform(X)
-    #         prec, recall, acc, f1=cv_performance(clf, X, y, kf )
-
-    #         score=f1 
 
 
 
-           
-    #         print("gamma = " + str(gamma) + ", C = " + str(c) + ", performance = " + str(score))
-    #         if score > bestPerformance:
-    #             bestPerformance = score
-    #             bestTuple = (gamma, c)
-
-    # return bestTuple
-
-
-
-
-def selectParamLogReg(X,y, skf):
+def selectParamLogReg(X,y, skf, standardized=False):
     CRange = 10.0**np.arange(-3,4)
     bestC = 0
     bestPerformance = 0
@@ -344,9 +331,10 @@ def selectParamLogReg(X,y, skf):
         X_train, X_val = X[train_index], X[val_index]
         y_train, y_val = y[train_index], y[val_index]
         clf = LogisticRegression(C=c, solver="sag", max_iter=700, n_jobs=-1)
-        scaler=StandardScaler()
-        X_train=scaler.fit_transform(X_train)
-        X_val=scaler.transform(X_val)
+        if not standardized:
+            scaler=StandardScaler()
+            X_train=scaler.fit_transform(X_train)
+            X_val=scaler.transform(X_val)
         clf.fit(X_train, y_train)
         y_pred=clf.predict(X_val)
         f1=f1_score(y_val, y_pred, average='weighted')
@@ -363,7 +351,43 @@ def selectParamLogReg(X,y, skf):
 
     return bestC
 
-def findBestHyperParameterRF(X, y, parameter, parameter_values, known_parameters_dict=None):
+def selectParamAdaboost(X, y, standardized=False):
+    print("hyperparameter tuning adaboost")
+    NRange=range(40,90,3)
+    bestN = 0
+    bestPerformance = 0
+    performances = []
+    kf = model_selection.KFold(n_splits=len(NRange), shuffle=True)
+
+    index=0
+
+    for train_index, val_index in kf.split(X):
+        n=NRange[index]
+        X_train, X_val = X[train_index], X[val_index]
+        y_train, y_val = y[train_index], y[val_index]
+        clf = AdaBoostClassifier(n_estimators=n)
+        if not standardized:
+            print("standardizing")
+            scaler=StandardScaler()
+            X_train=scaler.fit_transform(X_train)
+            X_val=scaler.transform(X_val)
+        clf.fit(X_train, y_train)
+        y_pred=clf.predict(X_val)
+        f1=f1_score(y_val, y_pred, average='weighted')
+
+        print("n = " + str(n) + ", performance = " + str(f1))
+        performances.append(performance)
+        if performance > bestPerformance:
+            bestPerformance = performance
+            bestN=n
+
+        index+=1
+
+
+
+    return bestN
+
+def findBestHyperParameterRF(X, y, parameter, parameter_values, known_parameters_dict=None, standardized=False):
     #test each value of parameter on one fold   
     plt.figure()
     splits=len(parameter_values)
@@ -375,14 +399,16 @@ def findBestHyperParameterRF(X, y, parameter, parameter_values, known_parameters
 
     
     for train_index, val_index in kf.split(X):
-        scaler = StandardScaler()
         kwargs = {parameter:parameter_values[index]}
         kwargs.update(known_parameters_dict)
         RF = RandomForestClassifier(n_jobs=-1,  **kwargs)
         X_train, X_val = X[train_index], X[val_index]
         y_train, y_val = y[train_index], y[val_index]
-        X_train=scaler.fit_transform(X_train)
-        X_val=scaler.transform(X_val)
+
+        if not standardized:
+            scaler = StandardScaler()
+            X_train=scaler.fit_transform(X_train)
+            X_val=scaler.transform(X_val)
         RF.fit(X_train, y_train)
         y_pred=RF.predict(X_val)
         f1_lst.append(f1_score(y_val, y_pred, average='weighted'))
@@ -397,6 +423,42 @@ def findBestHyperParameterRF(X, y, parameter, parameter_values, known_parameters
    
     plt.show()
 
+def findBestHyperParameterRFPCA(X, y, n_components):
+    #test each value of parameter on one fold   
+    plt.figure()
+    splits=len(n_components)
+    index=0
+    f1_lst=[]
+    
+
+    kf = model_selection.KFold(n_splits=splits, shuffle=True)
+
+    
+    for train_index, val_index in kf.split(X):
+        n=n_components[index]
+        RF = RandomForestClassifier(n_jobs=-1)
+        X_train, X_val = X[train_index], X[val_index]
+        y_train, y_val = y[train_index], y[val_index]
+        pca=PCA(n_components=n, svd_solver='randomized')
+        X_train=pca.fit_transform(X_train)
+        X_val=pca.transform(X_val)
+     
+        RF.fit(X_train, y_train)
+        y_pred=RF.predict(X_val)
+        f1_lst.append(f1_score(y_val, y_pred, average='weighted'))
+        index=index+1
+
+        print("n components", n)
+        print("explained variance", sum(pca.explained_variance_ratio_))
+       
+       
+
+    plt.scatter(n_components,f1_lst)
+   
+    plt.xlabel("n components")
+    plt.ylabel("f1 score")
+   
+    plt.show()
 
 def findNonBiasedFeatures(feature_importances, threshold):
     #give indices of all features whose importance is under the threshold
@@ -414,37 +476,37 @@ def findNonBiasedFeatures(feature_importances, threshold):
 
 
 
-def RandomForestHyperTuning(X, y ):
+def RandomForestHyperTuning(X, y , standardized=False):
 
     hyperparameters={}
-    max_depth=range(5,50,3)
-    findBestHyperParameterRF(X, y, "max_depth", max_depth, {})
+    max_depth=range(5,100,3)
+    findBestHyperParameterRF(X, y, "max_depth", max_depth, {},standardized)
 
     choice = input("input max depth parameter ")
     hyperparameters["max_depth"]=choice
 
-    n_estimators = np.arange(5, 50, 4)
-    findBestHyperParameterRF(X, y, "n_estimators", n_estimators, {})
+    n_estimators = np.arange(5, 100, 4)
+    findBestHyperParameterRF(X, y, "n_estimators", n_estimators, {},standardized)
 
     choice = input("input n_estimators parameter ")
     hyperparameters["n_estimators"]=choice
 
-    end_Range=min(X.shape[1],100)
+    end_Range=min(X.shape[1],25000)
 
     features_range = range(1, end_Range, 5)
-    findBestHyperParameterRF(X, y, "max_features", features_range, {})
+    findBestHyperParameterRF(X, y, "max_features", features_range, {},standardized)
 
     choice = input("input max_features parameter ")
     hyperparameters["max_features"]=choice
 
     min_samples_split = range(4, 800, 30)
-    findBestHyperParameterRF(X, y, "min_samples_split", min_samples_split, {})
+    findBestHyperParameterRF(X, y, "min_samples_split", min_samples_split, {},standardized)
 
     choice = input("input min_samples_split parameter ")
     hyperparameters["min_samples_split"]=choice
 
-    min_samples_leaf = range(1, 500, 30)
-    findBestHyperParameterRF(X, y, "min_samples_leaf", min_samples_leaf, {})       
+    min_samples_leaf = range(1, 600, 30)
+    findBestHyperParameterRF(X, y, "min_samples_leaf", min_samples_leaf, {},standardized)       
     choice = input("input min_samples_leaf parameter ")
     hyperparameters["min_samples_leaf"]=choice
 
@@ -729,13 +791,46 @@ def generateBOWEmailLengthTimeAttach():
     print(newX.shape)
     np.savez_compressed("init_only_data_time_attach_len" , X=newX, y=y, raw_X=emails, dictionary=dictionary)
 
-def main(model):
-    a=np.load("init_only_data_time_attach.npz")
+
+def analyzeMisclassified(y_pred, y_test, X_test, filename):
+
+    fp_indices=[]
+    fn_indices=[]
+    correct_indices=[]
+    incorrect_indices=[]
+    for index in range(len(y_pred)):
+        if y_pred[index]==y_test[index]:
+            correct_indices.append(index)
+        elif y_pred[index]==1 and y_test[index]==0:
+            fp_indices.append(index)
+            incorrect_indices.append(index)
+        elif y_pred[index]==0 and y_test[index]==1:
+            fn_indices.append(index)
+            incorrect_indices.append(index)
+
+    fp=X_test[fp_indices]
+    fn=X_test[fn_indices]
+    incorrect=X_test[incorrect_indices]
+    correct=X_test[correct_indices]
+
+    np.savez_compressed(filename, fp=fp, fn=fn, incorrect=incorrect, correct=correct)
+   
+
+
+
+
+def main(model, pca):
+    a=np.load("init_only_data.npz")
     
     X=a['X']
     
     y=a['y']
+
+
+
+   
     print(np.unique(y, return_counts=True))
+    print("x shape", X.shape)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
 
@@ -743,16 +838,86 @@ def main(model):
    
     skf= StratifiedKFold(n_splits=10, shuffle=True)
 
+    if pca==True:
+
+        print("performing pca")
+        #standardize
+        scaler=StandardScaler()
+        X_train=scaler.fit_transform(X_train)
+        X_test=scaler.transform(X_test)
+
+        #test how many components to explain variance
+        # for n in range(900,1200, 30):
+        #     pca=PCA(n_components=n, svd_solver='randomized')
+        #     pca.fit(X_train)
+        #     print(str(n)+"components")
+        #     print("variance")
+        #     print( sum(pca.explained_variance_ratio_))
+
+        n_components=range(720, 1200,30)
+        
+        findBestHyperParameterRFPCA(X_train, y_train, n_components)
+        n = input("input number of PCA components")
+
+       # n=
+        
+        pca=PCA(n_components=n, svd_solver='randomized')
+        X_train=pca.fit_transform(X_train)
+        X_test=pca.transform(X_test)
+        standardized=True
+    else:
+        print("no pca")
+        standardized=False
+   
+
+
+    if model=="adaboost":
+
+        n=selectParamAdaboost(X, y, standardized=standardized)
+        #n=65
+        clf=AdaBoostClassifier(n_estimators=n)
+        print("Adaboost")
+        print(train_and_test(clf, X_train, y_train, skf, X_test, y_test))
+        
+
+        with open("adaboost.pkl","wb") as f:
+            pickle.dump(clf, f)
+
+        np.savez_compressed("test_train_data", X_train=X_train, y_train= y_train, X_test=X_test, y_test=y_test)
+
+        y_score=clf.predict_proba(X_test)[:,0]
+        print("y test shape", y_test.shape)
+        print("y score shape", y_score.shape)
+
+        precision, recall, thresholds = precision_recall_curve(y_test, y_score)
+        plt.figure()
+        plt.step(recall, precision, color='b', alpha=0.2, where='post')
+        plt.fill_between(recall, precision, step='post', alpha=0.2, color='b')
+
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.ylim([0.0, 1.05])
+        plt.xlim([0.0, 1.0])
+        plt.title('2-class Precision-Recall curve')
+        plt.show()
+
+
+
+
     if model=="log reg":
-        c=selectParamLogReg(X_train,y_train, skf)
+        
+
+        #c=selectParamLogReg(X_train,y_train, skf)
+        c=1
         LR=LogisticRegression(C=c)
        
        
         print("log reg")
-        print(train_and_test(LR, X_train, y_train, skf, X_test, y_test))
+        print(train_and_test(LR, X_train, y_train, skf, X_test, y_test, standardized=standardized))
 
     elif model=="RF":
-        #RFparameters=RandomForestHyperTuning(X_train, y_train) #need to use these to train
+        print("rf hyperparameter tuning")
+        #RFparameters=RandomForestHyperTuning(X_train, y_train, standardized=True) #need to use these to train
         RFparameters={"max_depth":100, "n_estimators":45, "max_features":31, "min_samples_split":80, "min_samples_leaf":5}
         #RFparameters={"max_depth":15, "n_estimators":16, "max_features":50, "min_samples_split":245, "min_samples_leaf":35}
         RFtuned= RandomForestClassifier(**RFparameters)
@@ -761,7 +926,7 @@ def main(model):
 
 
         y_score=RFtuned.predict_log_proba(X_test)
-        print(y_score[0:100])
+        
         print(y_score.shape)
         print(y_test.shape)
         precision, recall, thresholds = precision_recall_curve(y_test, y_score[:,0])
@@ -774,10 +939,11 @@ def main(model):
         plt.xlim([0.0, 1.0])
         plt.title('2-class Precision-Recall curve')
         plt.show()
+    
 
     elif model=="SVM":
 
-        SVMparameters=tuneSVM(X_train, y_train)
+        SVMparameters=tuneSVM(X_train, y_train, standardized=True)
         # c=0.01
         # gamma=0.1
         gamma=SVMparameters[1]
@@ -812,7 +978,7 @@ def main(model):
 
 parser = argparse.ArgumentParser(description='Run classification')
 parser.add_argument('--model', dest='model', type=str, default='RF', help='type of classifier to use')
-#parser.add_argument('--dataWithFips', dest='dataWithFips', type=str, default='data/census_data_filtered_disability_with_fips.npz', help='The data set in dictionary fo')
+parser.add_argument('--PCA', dest='pca', type=bool, default=False, help='whether or not to use pca')
 
 
 if __name__ == "__main__": 

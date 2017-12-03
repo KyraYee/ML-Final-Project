@@ -113,6 +113,40 @@ def clean_text(data):
             entry['tokens']=None
     return data , dictionary
 
+
+
+def clean_text2(data):
+    dictionary={}
+    stop_words=makeStopWordList()
+    #takes in a list of dicts
+    for entry in data:
+        body=entry['body']
+        if body !=None:
+            tokens = nltk.word_tokenize(body)
+            stemmer = SnowballStemmer("english")
+            tokens=[stemmer.stem(word) for word in tokens if word not in stop_words and len(word)<30]  #tokens are unicode
+            for word in tokens:
+                #word is of type unicode
+                try:
+                    clean_word=word.encode('ascii', 'ignore')
+                    if clean_word not in dictionary and "@" not in clean_word :
+
+                        dictionary[clean_word]=1
+                    else if clean_word in dictionary and "@" not in clean_word :
+                        dictionary[clean_word]+=1
+
+                except UnicodeDecodeError:
+                    print("unicode error in text cleaning")
+                    print(word)
+            entry['tokens']=tokens
+        else:
+            print("no tokens")
+            entry['tokens']=None
+
+    dictionary_lst=[word for word in dictionary if dictionary[word]>20]
+    print("len of dictionary", len(dictionary))
+    return data , dictionary_lst
+
 def clean_text_no_dict(data):
    
     stop_words=makeStopWordList()
