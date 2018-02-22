@@ -11,17 +11,10 @@ from email.utils import parseaddr
 from StringIO import StringIO
 import mailbox
 from nltk.corpus import stopwords
-from sklearn import metrics
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-
-from sklearn.svm import SVC
-from sklearn.model_selection import StratifiedKFold
-from sklearn.utils import shuffle
-import pickle
 from nltk.stem.snowball import SnowballStemmer
 
+
+#--------------------------------------------------------------------------------------------------------------------------------
 #from https://stackoverflow.com/questions/7166922/extracting-the-body-of-an-email-from-mbox-file-decoding-it-to-plain-text-regard
 def getcharsets(msg):
     charsets = set({})
@@ -53,12 +46,12 @@ def getbodyfromemail(msg):
                     if subpart.get_content_type() == 'text/plain':
                         # Get the subpart payload (i.e the message body)
                         body = subpart.get_payload(decode=True) 
-                        #charset = subpart.get_charset()
+                       
 
             # Part isn't multipart so get the email body
             elif part.get_content_type() == 'text/plain':
                 body = part.get_payload(decode=True)
-                #charset = part.get_charset()
+                
 
     # If this isn't a multi-part message then get the payload (i.e the message body)
     elif msg.get_content_type() == 'text/plain':
@@ -80,14 +73,30 @@ def getbodyfromemail(msg):
     
     return body  , attachment
 
+#----------------------------------------------------------------------------------------------------------------------------
+
 
 def makeStopWordList():
+    """
+    Gives a stopword list which is the standard NLTK stopword list with some specialized additions for emails
+    """
     stop_words=stopwords.words('english')
     extra=[".", ",", "<", ">", "@", "+", "=", "subscribe", "unsubscribe", ""]
     stop_words=stop_words+extra
     return stop_words
 
 def clean_text(data):
+    """
+    Clean the text of the emails and perform tokenization
+    Parameters
+    --------------------
+       data -- list of dictionaries, where each entry in the list represents one email. The dictionary keys are different data feature types for the emails
+    
+    Returns
+    --------------------
+        data -- list of dictionaries, with an added feature "tokens", with the tokenized version of the email body
+        dictionary -- a list of all words in the vocabulary of the corpus
+    """
     dictionary=[]
     stop_words=makeStopWordList()
     #takes in a list of dicts
@@ -102,7 +111,6 @@ def clean_text(data):
                 try:
                     clean_word=word.encode('ascii', 'ignore')
                     if clean_word not in dictionary and "@" not in clean_word :
-
                         dictionary.append(clean_word)
                 except UnicodeDecodeError:
                     print("unicode error in text cleaning")
@@ -111,75 +119,48 @@ def clean_text(data):
         else:
             print("no tokens")
             entry['tokens']=None
+    dictionary =[word for word in dictionary if dictionary[word]>20] #each word must appear at least 20 times in the corpus to be included in the vocabulary
+
     return data , dictionary
 
 
 
-def clean_text2(data):
-    dictionary={}
-    stop_words=makeStopWordList()
-    #takes in a list of dicts
-    for entry in data:
-        body=entry['body']
-        if body !=None:
-            tokens = nltk.word_tokenize(body)
-            stemmer = SnowballStemmer("english")
-            tokens=[stemmer.stem(word) for word in tokens if word not in stop_words and len(word)<30]  #tokens are unicode
-            for word in tokens:
-                #word is of type unicode
-                try:
-                    clean_word=word.encode('ascii', 'ignore')
-                    if clean_word not in dictionary and "@" not in clean_word :
 
-                        dictionary[clean_word]=1
-                    elif clean_word in dictionary and "@" not in clean_word :
-                        dictionary[clean_word]+=1
-
-                except UnicodeDecodeError:
-                    print("unicode error in text cleaning")
-                    print(word)
-            entry['tokens']=tokens
-        else:
-            print("no tokens")
-            entry['tokens']=None
-
-    dictionary_lst=[word for word in dictionary if dictionary[word]>20]
-    print("len of dictionary", len(dictionary))
-    return data , dictionary_lst
-
-def clean_text_no_dict(data):
-   
-    stop_words=makeStopWordList()
-    #takes in a list of dicts
-    for entry in data:
-        body=entry['body']
-        tokens = nltk.word_tokenize(body)
-        stemmer = SnowballStemmer("english")
-        tokens=[stemmer.stem(word) for word in tokens if word not in stop_words and len(word)<30]  #tokens are unicode
-        
-        entry['tokens']=tokens
-    return data 
-
-
-#'north-chat.mbox'
 def loadData(mbox_file):
+    """
+    load the mbox data
+    --------------------
+       mbox_file -- string, the name of the mbox file to open
+    
+    Returns
+    --------------------
+        data -- a list of dictionaries, where each entry in the list corresponds to the data from a single email
+
+    """
     data=[]
     #load all data into a list of dicts
     mb = mailbox.mbox(mbox_file)
     #this is how you access the different features and the text body
-    #we need to save everything nicely into one dataset
     for thisemail in mb:
         dmessage = dict(thisemail.items())
         body, attachment = getbodyfromemail(thisemail)
         dmessage['attachment']=attachment
         dmessage['body']= body
         data.append(dmessage)
-    print(len(data))
     return data
 
 def separateReplies(data):
-    #takes in a list of dicts
-    #separates replies and non-replies
+     """
+    load the mbox data
+    --------------------
+       data -- list of dicts, with the loaded mbox data
+    
+    Returns
+    --------------------
+        inits   -- a list of dictionaries, where each entry in the list corresponds to the data from a single email for initial emails
+        replies -- a list of dictionaries, where each entry in the list corresponds to the data from a single email for emails that were replies
+
+    """
     replies=[]
     inits=[]
     for entry in data:
@@ -187,13 +168,13 @@ def separateReplies(data):
             replies.append(entry)
         else:
             inits.append(entry)
-    print("len replies:", len(replies))
-    print("len initial emails:", len(inits))
+    print("number of  replies:", len(replies))
+    print("number of initial emails:", len(inits))
     return inits, replies
 
-
+ # from https://www.ianlewis.org/en/parsing-email-attachments-python
+#---------------------------------------------------------------------------------------
 def parse_attachment(message_part):
-    # from https://www.ianlewis.org/en/parsing-email-attachments-python
     content_disposition = message_part.get("Content-Disposition", None)
     if content_disposition:
         dispositions = content_disposition.strip().split(";")
@@ -224,8 +205,12 @@ def parse_attachment(message_part):
 
     return None
 
+#---------------------------------------------------------------------------------------
 
 def seeFeature(data, feature):
+    """
+    look at a given feature
+    """
     for i in range(10):
             try:
                 print(feature,data[i][feature])
@@ -233,6 +218,9 @@ def seeFeature(data, feature):
                 print("key error body ")
 
 def doWtoNum(doW):
+    """ 
+    encode each day of the week string as a number
+    """
     if doW == 'Sun':
         return 0
     elif doW == 'Mon': 
@@ -252,55 +240,9 @@ def doWtoNum(doW):
 
 
 
-
+#This is all of the raw mbox features, for reference
 #['X-Gmail-Labels', 'Delivered-To', 'From', 'Return-Path', 'List-ID', 'Mailing-list', 'X-Gm-Message-State',
 # 'To', 'Message-ID', 'List-Post', 'X-Received', 'X-Google-DKIM-Signature', 'In-Reply-To', 'Date', 'List-Archive',
 # 'body', 'Received', 'Received-SPF', 'Authentication-Results', 'X-Original-Authentication-Results', 'X-BeenThere', 
 #'X-Google-Group-Id', 'Reply-To', 'List-Help', 'MIME-Version', 'Precedence', 'X-Spam-Checked-In-Group', 
 #'X-Original-Sender', 'X-GM-THRID', 'References', 'DKIM-Signature', 'List-Unsubscribe', 'Content-Type', 'Subject']
-def main():
-    #1 for chat, 0 for dorm
-    chat_data=loadData('north-chat.mbox') 
-    #dorm_data=loadData('north-dorm.mbox')
-
-    inits1,replies1=separateReplies(chat_data)
-    #inits2, replies2=separateReplies(dorm_data)
-   
-    
-    replies1, dictionary1= clean_text(replies1)
-   # replies2, dictionary2=clean_text(replies2)
-   # merged_dictionary=dictionary1+dictionary2
-    # print("len dictionary", len(merged_dictionary))
-    
-
-    # feature_matrix1=extract_feature_vectors(replies1,merged_dictionary)
-    # print(feature_matrix1.shape)
-    # y1=np.full(feature_matrix1.shape[0], 1)
-    # print(y1.shape)
-
-        
-    # feature_matrix2=extract_feature_vectors(replies2, merged_dictionary)
-    # print(feature_matrix2.shape)
-    # y2=np.full(feature_matrix2.shape[0], 0)
-
-    # y=np.concatenate((y1,y2), axis=0)
-    # X=np.concatenate((feature_matrix1, feature_matrix2), axis=0)
-
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=47, shuffle=True)
-    # np.savez_compressed("reply_only_data" , X=X, y=y)
-    # skf= StratifiedKFold(n_splits=10, shuffle=True)
-
-    # LR=LogisticRegression()
-    # RF=RandomForestClassifier()
-    
-    # print("log reg")
-    # train_and_test(LR, X_train, y_train, skf, X_test, y_test)
-    # print("random forest")
-    # train_and_test(RF, X_train, y_train, skf, X_test, y_test)
-    # # with open('iniial_model_BOW_no_replies.pickle', 'wb') as handle:
-    # #     pickle.dump(clf, handle)
-
-
-
-if __name__=="__main__":
-    main()
