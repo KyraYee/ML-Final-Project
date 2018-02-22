@@ -45,7 +45,7 @@ def performance(y_true, y_pred, metric="specificity") :
     return tn/float(tn+fp)
 
 def test_performance(clf,x_test,y_test):
-     """
+    """
     Calculates the performance metrics on the test set given a pretrained classifier
     
     Parameters

@@ -117,7 +117,7 @@ def generateBOWData():
     np.savez_compressed("init_only_data" , X=X, y=y, dictionary=dictionary)
 
 def generateeNonalphanum(load_file, save_file):
-     """
+    """
      takes in a previously generated dataset and adds the number of nonalphanumeric characters as a datafeature
     
     Parameters
@@ -142,7 +142,7 @@ def generateeNonalphanum(load_file, save_file):
     np.savez_compressed(save_file , X=newX, y=y, raw_X=emails, dictionary=dictionary)
 
 def generateAttachment(load_file, save_file):
-     """
+    """
      takes in a previously generated dataset and adds whether or not there was an attachment as a datafeature
     
     Parameters
@@ -172,7 +172,7 @@ def generateAttachment(load_file, save_file):
     np.savez_compressed(save_file , X=newX, y=y, raw_X=emails, dictionary=dictionary)
 
 def generateTime(load_file, save_file):
-     """
+    """
      takes in a previously generated dataset and adds the day of week and the time sent
     
     Parameters
@@ -240,7 +240,7 @@ def asteriskCount(message):
     return asteriskCount
 
 def nonAlphaNumeric(c):
-     """
+    """
     Parameters
     --------------------
        c - character

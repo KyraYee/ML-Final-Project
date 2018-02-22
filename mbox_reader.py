@@ -150,7 +150,7 @@ def loadData(mbox_file):
     return data
 
 def separateReplies(data):
-     """
+    """
     load the mbox data
     --------------------
        data -- list of dicts, with the loaded mbox data
