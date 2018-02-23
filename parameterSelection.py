@@ -250,7 +250,7 @@ def RandomForestHyperTuning(X, y , standardized=False):
     choice = input("input n_estimators parameter ")
     hyperparameters["n_estimators"]=choice
 
-    end_Range=min(X.shape[1],25000)
+    end_Range=min(X.shape[1],200)
 
     features_range = range(1, end_Range, 5)
     findBestHyperParameterRF(X, y, "max_features", features_range, {},standardized)
